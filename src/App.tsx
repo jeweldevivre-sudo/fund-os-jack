@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-// อัปเดต URL ใหม่ตามที่คุณส่งมา
-const API_URL = "https://script.google.com/macros/s/AKfycbwG4j901XRPDeXXzbP_j61sfSIZpJYsFXOBNn3RxI5uAx-RMAnuCX-CjjLy2Ty53n_K/exec";
+const API_URL =
+  (import.meta as any).env?.VITE_API_URL ||
+  "https://script.google.com/macros/s/AKfycbw1ccMGs8Tknisa9mpIQqHkwzoRDFFd62N4I1kD7lDqEqhf9wjfhO2wrzG-nRUkaNGL/exec";
 
 const CATEGORIES = [
   "US Equity",
@@ -28,8 +29,6 @@ type SummaryData = {
 };
 
 type Holding = {
-  _id?: string;
-  rowId?: number;
   type?: string;
   category?: string;
   fundName?: string;
@@ -46,10 +45,8 @@ type TargetWeight = {
 };
 
 type BuyOrder = {
-  rowId?: number;
   fundName?: string;
   suggestedBuy?: string | number;
-  category?: string;
 };
 
 type ApiData = {
@@ -67,11 +64,6 @@ type ApiData = {
 
 type Align = "left" | "right" | "center";
 type TabName = "dashboard" | "input";
-
-let _idCounter = 0;
-function newId() {
-  return String(++_idCounter);
-}
 
 function num(v: unknown) {
   const n = Number(
@@ -141,8 +133,7 @@ export default function App() {
       setData(json);
       setPortfolioName(json?.meta?.portfolioName || "");
       setSummary(json?.summary || {});
-      
-      setHoldings((json?.holdings || []).map((h) => ({ ...h, _id: newId() })));
+      setHoldings(json?.holdings || []);
       setTargetWeight(
         (json?.targetWeight || []).map((r) => ({
           category: r.category || "",
@@ -208,15 +199,13 @@ export default function App() {
         })),
       });
 
-      if (targetWeight.length > 0) {
-        await post({
-          action: "saveTargetWeight",
-          targetWeight: targetWeight.map((t) => ({
-            category: t.category || "",
-            targetPercent: targetPercentForApi(t.targetPercent),
-          })),
-        });
-      }
+      await post({
+        action: "saveTargetWeight",
+        targetWeight: targetWeight.map((t) => ({
+          category: t.category || "",
+          targetPercent: targetPercentForApi(t.targetPercent),
+        })),
+      });
 
       await loadData();
       setNotice("Saved");
@@ -241,8 +230,6 @@ export default function App() {
         action: "logDcaBuy",
         fundName,
         amount,
-        rowId: order.rowId, // ส่ง rowId กลับไปเพื่ออัปเดตสถานะรายเดือน
-        category: order.category
       });
       await loadData();
       setNotice(`Logged ${fundName} ฿${fmt(amount)}`);
@@ -291,9 +278,9 @@ export default function App() {
 
       <header style={S.header}>
         <div>
-          <div style={S.badge}>JACK FUND OS</div>
+          <div style={S.badge}>RMF FUND OS</div>
           <h1 style={S.title}>Tax Saving Fund Dashboard</h1>
-          <p style={S.sub}>Integrated Premium Service Portfolio</p>
+          <p style={S.sub}>A friend for your RMF decision</p>
         </div>
 
         <div style={S.headerRight}>
@@ -336,7 +323,7 @@ export default function App() {
           <section style={S.stats}>
             <Stat label="Total Portfolio" value={`฿${fmt(totalPortfolio)}`} />
             <Stat label="DCA Budget" value={`฿${fmt(dcaBudget)}`} />
-            <Stat label="Remaining Goal" value={`฿${fmt(remaining)}`} />
+            <Stat label="Remaining" value={`฿${fmt(remaining)}`} />
             <Stat label="Investment Term" value={`${summary.investmentTerm || 0} years`} />
           </section>
 
@@ -358,17 +345,19 @@ export default function App() {
             </div>
 
             <div style={S.card}>
-              <h2 style={S.cardTitle}>Status & Analysis</h2>
-              <Summary label="Phase Status" value={summary.status} />
-              <Summary label="Current Portfolio" value={`฿${fmt(summary.totalPortfolioValue)}`} />
+              <h2 style={S.cardTitle}>Portfolio Summary</h2>
+              <Summary label="Status" value={summary.status} />
+              <Summary label="DCA Budget" value={`฿${fmt(summary.dcaBudget)}`} />
+              <Summary label="Total Portfolio Value" value={`฿${fmt(summary.totalPortfolioValue)}`} />
+              <Summary label="Total Value After DCA" value={`฿${fmt(summary.totalValueAfterDCA)}`} />
               <Summary label="Target Goal" value={`฿${fmt(summary.targetGoal)}`} />
-              <Summary label="Gap to Goal" value={`฿${fmt(summary.remaining)}`} />
-              <Summary label="Calculated DCA" value={`฿${fmt(summary.suggestedDCA)}`} />
-              <Summary label="Action Advice" value={summary.suggestedAction} />
+              <Summary label="Remaining" value={`฿${fmt(summary.remaining)}`} />
+              <Summary label="Suggested DCA" value={`฿${fmt(summary.suggestedDCA)}`} />
+              <Summary label="Suggested Action" value={summary.suggestedAction} />
               <Summary
-                label="Timeline"
-                value={`${summary.investmentTerm || 0} yrs left`}
-                hint={`Retirement target: Age ${summary.retirementAge || 60}`}
+                label="Investment Term"
+                value={`${summary.investmentTerm || 0} years`}
+                hint={`Calculated from your current age to age ${summary.retirementAge || 60}`}
               />
             </div>
           </section>
@@ -376,22 +365,22 @@ export default function App() {
           <section style={S.card}>
             <div style={S.cardHeaderRow}>
               <div>
-                <h2 style={S.cardTitle}>Buy Orders (Monthly DCA)</h2>
-                <p style={S.cardHint}>Orders are generated based on Gap Value toward your 5M target.</p>
+                <h2 style={S.cardTitle}>Buy Orders</h2>
+                <p style={S.cardHint}>Edit the buy amount if your actual purchase differs, then mark Bought.</p>
               </div>
             </div>
             <table style={S.table}>
               <thead>
                 <tr>
                   <Th>Fund Name</Th>
-                  <Th align="right">Amount (฿)</Th>
-                  <Th align="center">Action</Th>
+                  <Th align="right">Buy Amount</Th>
+                  <Th align="center">Done</Th>
                 </tr>
               </thead>
               <tbody>
                 {(data?.buyOrders || []).length === 0 && (
                   <tr>
-                    <Td>All tasks completed for this month</Td>
+                    <Td>No buy order</Td>
                     <Td align="right">-</Td>
                     <Td align="center">-</Td>
                   </tr>
@@ -401,7 +390,7 @@ export default function App() {
                     <Td>{b.fundName}</Td>
                     <Td align="right">
                       <input
-                        style={{ ...S.inline, textAlign: "right" }}
+                        style={{ ...S.amountInput, textAlign: "right" }}
                         value={buyAmounts[String(b.fundName || "").trim()] ?? String(b.suggestedBuy ?? "")}
                         onChange={(e) => {
                           const fundName = String(b.fundName || "").trim();
@@ -423,7 +412,7 @@ export default function App() {
                           }}
                         />
                         <span style={S.checkboxText}>
-                          {loggingFund === b.fundName ? "Processing…" : "Confirm Buy"}
+                          {loggingFund === b.fundName ? "Logging…" : "Bought"}
                         </span>
                       </label>
                     </Td>
@@ -438,27 +427,27 @@ export default function App() {
       {activeTab === "input" && (
         <main style={S.content}>
           <div style={S.card}>
-            <h2 style={S.cardTitle}>Financial Parameters</h2>
+            <h2 style={S.cardTitle}>Summary Inputs</h2>
             <div style={S.inputGrid}>
-              <Input label="Monthly DCA Budget" value={summary.dcaBudget} onChange={(v) => setSummary({ ...summary, dcaBudget: v })} />
-              <Input label="Total Target Goal" value={summary.targetGoal} onChange={(v) => setSummary({ ...summary, targetGoal: v })} />
+              <Input label="DCA Budget" value={summary.dcaBudget} onChange={(v) => setSummary({ ...summary, dcaBudget: v })} />
+              <Input label="Target Goal" value={summary.targetGoal} onChange={(v) => setSummary({ ...summary, targetGoal: v })} />
               <Input label="Current Age" value={summary.currentAge} onChange={(v) => setSummary({ ...summary, currentAge: v })} />
               <Input label="Retirement Age" value={summary.retirementAge} onChange={(v) => setSummary({ ...summary, retirementAge: v })} />
             </div>
           </div>
 
           <div style={S.card}>
-            <h2 style={S.cardTitle}>Asset Allocation Targets</h2>
+            <h2 style={S.cardTitle}>Target Weight</h2>
             <table style={S.table}>
               <thead>
                 <tr>
                   <Th>Category</Th>
-                  <Th align="right">Target (%)</Th>
+                  <Th align="right">Target %</Th>
                 </tr>
               </thead>
               <tbody>
                 {targetWeight.map((r, i) => (
-                  <tr key={i}>
+                  <tr key={`${r.category}-${i}`}>
                     <Td>
                       <select
                         style={S.select}
@@ -492,7 +481,7 @@ export default function App() {
           </div>
 
           <div style={S.card}>
-            <h2 style={S.cardTitle}>Fund Inventory</h2>
+            <h2 style={S.cardTitle}>Portfolio Holdings</h2>
             <table style={S.table}>
               <thead>
                 <tr>
@@ -506,7 +495,7 @@ export default function App() {
               </thead>
               <tbody>
                 {holdings.map((h, i) => (
-                  <tr key={h._id}>
+                  <tr key={`${h.fundName}-${i}`}>
                     <Td>
                       <input style={S.inline} value={h.type || ""} onChange={(e) => updateHolding(i, "type", e.target.value)} />
                     </Td>
@@ -540,11 +529,11 @@ export default function App() {
               onClick={() =>
                 setHoldings([
                   ...holdings,
-                  { _id: newId(), type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "" },
+                  { type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "" },
                 ])
               }
             >
-              + Add New Fund
+              Add Fund
             </button>
           </div>
         </main>
@@ -584,7 +573,7 @@ function Input({ label, value, onChange }: { label: string; value: unknown; onCh
 }
 
 function Th({ children, align = "left" }: { children: React.ReactNode; align?: Align }) {
-  return <th style={{ ...S.th, textAlign: align }}>{children}</th></th>;
+  return <th style={{ ...S.th, textAlign: align }}>{children}</th>;
 }
 
 function Td({ children, align = "left" }: { children: React.ReactNode; align?: Align }) {
@@ -894,22 +883,5 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     cursor: "pointer",
     fontSize: 12,
-  },
-  checkboxWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    cursor: "pointer",
-    justifyContent: "center",
-  },
-  checkbox: {
-    accentColor: "#00d4aa",
-    width: 16,
-    height: 16,
-    cursor: "pointer",
-  },
-  checkboxText: {
-    fontSize: 12,
-    color: "#64748b",
   },
 };
