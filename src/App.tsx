@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  "https://script.google.com/macros/s/AKfycbw1ccMGs8Tknisa9mpIQqHkwzoRDFFd62N4I1kD7lDqEqhf9wjfhO2wrzG-nRUkaNGL/exec";
+  "https://script.google.com/macros/s/AKfycbwUDA6o3tIljBmau6xgs9iD3N3F5vCFe-GJmuhWAkkvnRjPI_snhoVlrNjfWKdUpL2v/exec";
 
 const CATEGORIES = [
   "US Equity",
@@ -284,10 +284,28 @@ export default function App() {
   const dcaBudget = summary.dcaBudget || 0;
   const remaining = summary.remaining || 0;
 
-  const donut = useMemo(() => {
+  const categoryWeights = useMemo(() => {
     const rows = data?.holdings || [];
+    const totalMarketValue = rows.reduce((sum, h) => sum + num(h.marketValue), 0);
+    const map: Record<string, { category: string; marketValue: number; currentPercent: number }> = {};
+
+    rows.forEach((h) => {
+      const category = String(h.category || "Uncategorized").trim() || "Uncategorized";
+      if (!map[category]) {
+        map[category] = { category, marketValue: 0, currentPercent: 0 };
+      }
+      map[category].marketValue += num(h.marketValue);
+    });
+
+    return Object.values(map).map((item) => ({
+      ...item,
+      currentPercent: totalMarketValue > 0 ? item.marketValue / totalMarketValue : 0,
+    }));
+  }, [data]);
+
+  const donut = useMemo(() => {
     let start = 0;
-    const parts = rows.map((r, i) => {
+    const parts = categoryWeights.map((r, i) => {
       const pct = num(r.currentPercent) <= 1 ? num(r.currentPercent) * 100 : num(r.currentPercent);
       const end = start + pct;
       const p = `${PALETTE[i % PALETTE.length]} ${start}% ${end}%`;
@@ -295,7 +313,7 @@ export default function App() {
       return p;
     });
     return parts.length ? `conic-gradient(${parts.join(",")})` : "#1e293b";
-  }, [data]);
+  }, [categoryWeights]);
 
   if (loading) {
     return (
@@ -370,8 +388,8 @@ export default function App() {
                 </div>
               </div>
 
-              {(data?.holdings || []).map((h, i) => (
-                <div key={`${h.fundName}-${i}`} style={S.weightRow}>
+              {categoryWeights.map((h, i) => (
+                <div key={`${h.category}-${i}`} style={S.weightRow}>
                   <span>{h.category}</span>
                   <b style={{ color: PALETTE[i % PALETTE.length] }}>{fmtPct(h.currentPercent)}</b>
                 </div>
