@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  "https://script.google.com/macros/s/AKfycbw1ccMGs8Tknisa9mpIQqHkwzoRDFFd62N4I1kD7lDqEqhf9wjfhO2wrzG-nRUkaNGL/exec";
+  "https://script.google.com/macros/s/AKfycbxlSywlDEkevqrMZ9qV50WRaD2D7fqLRIxb0z-eyGIaDU6jSkIN1_k8ChYEOJaIraEn/exec";
 
 const CATEGORIES = [
   "US Equity",
@@ -142,12 +142,10 @@ export default function App() {
       setData(json);
       setPortfolioName(json?.meta?.portfolioName || "");
       setSummary(json?.summary || {});
-      setHoldings(
-        (json?.holdings || []).map((h) => ({
-          ...h,
-          mainFund: String(h.mainFund || "NO").trim().toUpperCase() === "YES" ? "YES" : "NO",
-        }))
-      );
+      setHoldings((json?.holdings || []).map((h) => ({
+        ...h,
+        mainFund: String(h.mainFund || "NO").trim().toUpperCase() === "YES" ? "YES" : "NO",
+      })));
       setTargetWeight(
         (json?.targetWeight || []).map((r) => ({
           category: r.category || "",
@@ -308,7 +306,7 @@ export default function App() {
       ...item,
       currentPercent: totalMarketValue > 0 ? item.marketValue / totalMarketValue : 0,
     }));
-  }, [data, holdings]);
+  }, [holdings, data]);
 
   const donut = useMemo(() => {
     let start = 0;
@@ -609,7 +607,7 @@ export default function App() {
                     <Td>
                       <select
                         style={S.select}
-                        value={String(h.mainFund || "NO")}
+                        value={String(h.mainFund || "NO").trim().toUpperCase() === "YES" ? "YES" : "NO"}
                         onChange={(e) => updateHolding(i, "mainFund", e.target.value)}
                       >
                         <option value="YES">YES</option>
