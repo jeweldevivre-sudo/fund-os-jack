@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 // อัปเดต URL ใหม่ตามที่คุณส่งมา
-const API_URL = "https://script.google.com/macros/s/AKfycbw4nxpxCtUMzw0_ZfV8R1TH6h0vAHOk3_9dO-rTZrsjt198lZM4D9ac5mlMIEhhqVPq/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwG4j901XRPDeXXzbP_j61sfSIZpJYsFXOBNn3RxI5uAx-RMAnuCX-CjjLy2Ty53n_K/exec";
 
 const CATEGORIES = [
   "US Equity",
