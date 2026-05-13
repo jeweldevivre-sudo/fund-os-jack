@@ -29,6 +29,7 @@ type SummaryData = {
 };
 
 type Holding = {
+  _id?: string;
   type?: string;
   category?: string;
   fundName?: string;
@@ -64,6 +65,11 @@ type ApiData = {
 
 type Align = "left" | "right" | "center";
 type TabName = "dashboard" | "input";
+
+let _idCounter = 0;
+function newId() {
+  return String(++_idCounter);
+}
 
 function num(v: unknown) {
   const n = Number(
@@ -133,7 +139,8 @@ export default function App() {
       setData(json);
       setPortfolioName(json?.meta?.portfolioName || "");
       setSummary(json?.summary || {});
-      setHoldings(json?.holdings || []);
+      // Assign stable _id to each holding so React can track rows correctly
+      setHoldings((json?.holdings || []).map((h) => ({ ...h, _id: newId() })));
       setTargetWeight(
         (json?.targetWeight || []).map((r) => ({
           category: r.category || "",
@@ -390,7 +397,7 @@ export default function App() {
                     <Td>{b.fundName}</Td>
                     <Td align="right">
                       <input
-                        style={{ ...S.amountInput, textAlign: "right" }}
+                        style={{ ...S.inline, textAlign: "right" }}
                         value={buyAmounts[String(b.fundName || "").trim()] ?? String(b.suggestedBuy ?? "")}
                         onChange={(e) => {
                           const fundName = String(b.fundName || "").trim();
@@ -495,7 +502,7 @@ export default function App() {
               </thead>
               <tbody>
                 {holdings.map((h, i) => (
-                  <tr key={i}}>
+                  <tr key={h._id}>
                     <Td>
                       <input style={S.inline} value={h.type || ""} onChange={(e) => updateHolding(i, "type", e.target.value)} />
                     </Td>
@@ -529,7 +536,7 @@ export default function App() {
               onClick={() =>
                 setHoldings([
                   ...holdings,
-                  { type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "" },
+                  { _id: newId(), type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "" },
                 ])
               }
             >
@@ -883,5 +890,22 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     cursor: "pointer",
     fontSize: 12,
+  },
+  checkboxWrap: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    cursor: "pointer",
+    justifyContent: "center",
+  },
+  checkbox: {
+    accentColor: "#00d4aa",
+    width: 16,
+    height: 16,
+    cursor: "pointer",
+  },
+  checkboxText: {
+    fontSize: 12,
+    color: "#64748b",
   },
 };
