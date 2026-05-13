@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  "https://script.google.com/macros/s/AKfycbwmQR8Sh2mmQ8U4z2ZCqkj-AKvaak8mAuSeeOFJI_jn8kHWEnxTIIhXVO_nzPBVKVGT/exec";
+  "https://script.google.com/macros/s/AKfycbw1ccMGs8Tknisa9mpIQqHkwzoRDFFd62N4I1kD7lDqEqhf9wjfhO2wrzG-nRUkaNGL/exec";
 
 const CATEGORIES = [
   "US Equity",
@@ -29,7 +29,6 @@ type SummaryData = {
 };
 
 type Holding = {
-  _id?: string;
   type?: string;
   category?: string;
   fundName?: string;
@@ -49,6 +48,13 @@ type TargetWeight = {
 type BuyOrder = {
   fundName?: string;
   suggestedBuy?: string | number;
+  category?: string;
+  // alternate key formats from Google Apps Script
+  "Fund Name"?: string;
+  "Suggested Buy"?: string | number;
+  "Category"?: string;
+  fund_name?: string;
+  suggested_buy?: string | number;
 };
 
 type ApiData = {
@@ -66,11 +72,6 @@ type ApiData = {
 
 type Align = "left" | "right" | "center";
 type TabName = "dashboard" | "input";
-
-let _idCounter = 0;
-function newId() {
-  return String(++_idCounter);
-}
 
 function num(v: unknown) {
   const n = Number(
@@ -119,6 +120,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loggingFund, setLoggingFund] = useState("");
+  const [buyOrders, setBuyOrders] = useState<BuyOrder[]>([]);
   const [buyAmounts, setBuyAmounts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -140,12 +142,12 @@ export default function App() {
       setData(json);
       setPortfolioName(json?.meta?.portfolioName || "");
       setSummary(json?.summary || {});
-      // Assign stable _id to each holding so React can track rows correctly
-      setHoldings((json?.holdings || []).map((h) => ({
-        ...h,
-        _id: newId(),
-        mainFund: String(h.mainFund || "NO").trim().toUpperCase() === "YES" ? "YES" : "NO",
-      })));
+      setHoldings(
+        (json?.holdings || []).map((h) => ({
+          ...h,
+          mainFund: String(h.mainFund || "NO").trim().toUpperCase() === "YES" ? "YES" : "NO",
+        }))
+      );
       setTargetWeight(
         (json?.targetWeight || []).map((r) => ({
           category: r.category || "",
@@ -153,10 +155,36 @@ export default function App() {
         }))
       );
 
+      // Normalize buy orders — Google Apps Script may return keys as camelCase,
+      // "Fund Name" / "Suggested Buy", or other variations
+      function normalizeBuyOrder(order: BuyOrder): { fundName: string; suggestedBuy: string | number; category: string } {
+        const name =
+          String(
+            order.fundName ||
+            order["Fund Name"] ||
+            order.fund_name ||
+            ""
+          ).trim();
+        const buy =
+          order.suggestedBuy ??
+          order["Suggested Buy"] ??
+          order.suggested_buy ??
+          "";
+        const cat =
+          String(order.category || order["Category"] || "").trim();
+        return { fundName: name, suggestedBuy: buy, category: cat };
+      }
+
+      const cleanedBuyOrders = (json?.buyOrders || [])
+        .map(normalizeBuyOrder)
+        .filter((order) => order.fundName !== "" && num(order.suggestedBuy) > 0);
+
+      setBuyOrders(cleanedBuyOrders);
+
       const nextBuyAmounts: Record<string, string> = {};
-      (json?.buyOrders || []).forEach((order) => {
+      cleanedBuyOrders.forEach((order) => {
         const fundName = String(order.fundName || "").trim();
-        if (fundName) nextBuyAmounts[fundName] = String(order.suggestedBuy ?? "");
+        nextBuyAmounts[fundName] = String(order.suggestedBuy ?? "");
       });
       setBuyAmounts(nextBuyAmounts);
     } catch (e) {
@@ -264,7 +292,7 @@ export default function App() {
   const remaining = summary.remaining || 0;
 
   const categoryWeights = useMemo(() => {
-    const rows = data?.holdings || [];
+    const rows = holdings.length > 0 ? holdings : data?.holdings || [];
     const totalMarketValue = rows.reduce((sum, h) => sum + num(h.marketValue), 0);
     const map: Record<string, { category: string; marketValue: number; currentPercent: number }> = {};
 
@@ -280,12 +308,11 @@ export default function App() {
       ...item,
       currentPercent: totalMarketValue > 0 ? item.marketValue / totalMarketValue : 0,
     }));
-  }, [data]);
+  }, [data, holdings]);
 
   const donut = useMemo(() => {
-    const rows = categoryWeights;
     let start = 0;
-    const parts = rows.map((r, i) => {
+    const parts = categoryWeights.map((r, i) => {
       const pct = num(r.currentPercent) <= 1 ? num(r.currentPercent) * 100 : num(r.currentPercent);
       const end = start + pct;
       const p = `${PALETTE[i % PALETTE.length]} ${start}% ${end}%`;
@@ -405,24 +432,29 @@ export default function App() {
               <thead>
                 <tr>
                   <Th>Fund Name</Th>
-                  <Th align="right">Buy Amount</Th>
+                  <Th align="right">Suggested Buy (฿)</Th>
+                  <Th align="right">Actual Amount (฿)</Th>
                   <Th align="center">Done</Th>
                 </tr>
               </thead>
               <tbody>
-                {(data?.buyOrders || []).length === 0 && (
+                {buyOrders.length === 0 && (
                   <tr>
-                    <Td>No buy order</Td>
+                    <Td>No buy orders</Td>
+                    <Td align="right">-</Td>
                     <Td align="right">-</Td>
                     <Td align="center">-</Td>
                   </tr>
                 )}
-                {(data?.buyOrders || []).map((b, i) => (
+                {buyOrders.map((b, i) => (
                   <tr key={`${b.fundName}-${i}`}>
                     <Td>{b.fundName}</Td>
+                    <Td align="right" style={{ color: "#00d4aa", fontFamily: "'DM Mono', monospace" }}>
+                      ฿{fmt(b.suggestedBuy)}
+                    </Td>
                     <Td align="right">
                       <input
-                        style={{ ...S.inline, textAlign: "right" }}
+                        style={{ ...S.amountInput, textAlign: "right" }}
                         value={buyAmounts[String(b.fundName || "").trim()] ?? String(b.suggestedBuy ?? "")}
                         onChange={(e) => {
                           const fundName = String(b.fundName || "").trim();
@@ -450,8 +482,30 @@ export default function App() {
                     </Td>
                   </tr>
                 ))}
+                {buyOrders.length > 0 && (
+                  <tr style={{ background: "rgba(0,212,170,.05)" }}>
+                    <td style={{ ...S.td, fontWeight: 700, color: "#e2e8f0" }}>Total</td>
+                    <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: "#00d4aa", fontFamily: "'DM Mono', monospace" }}>
+                      ฿{fmt(buyOrders.reduce((sum, b) => sum + num(b.suggestedBuy), 0))}
+                    </td>
+                    <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: "#00d4aa", fontFamily: "'DM Mono', monospace" }}>
+                      ฿{fmt(buyOrders.reduce((sum, b) => sum + num(buyAmounts[String(b.fundName || "").trim()] ?? b.suggestedBuy), 0))}
+                    </td>
+                    <td style={S.td} />
+                  </tr>
+                )}
               </tbody>
             </table>
+            {buyOrders.length === 0 && data?.buyOrders && data.buyOrders.length > 0 && (
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ color: "#475569", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono', monospace" }}>
+                  Debug: raw buyOrders from API ({data.buyOrders.length} rows)
+                </summary>
+                <pre style={{ color: "#475569", fontSize: 10, marginTop: 6, overflowX: "auto" }}>
+                  {JSON.stringify(data.buyOrders, null, 2)}
+                </pre>
+              </details>
+            )}
           </section>
         </main>
       )}
@@ -479,7 +533,7 @@ export default function App() {
               </thead>
               <tbody>
                 {targetWeight.map((r, i) => (
-                  <tr key={i}>
+                  <tr key={`${r.category}-${i}`}>
                     <Td>
                       <select
                         style={S.select}
@@ -528,7 +582,7 @@ export default function App() {
               </thead>
               <tbody>
                 {holdings.map((h, i) => (
-                  <tr key={h._id}>
+                  <tr key={`${h.fundName}-${i}`}>
                     <Td>
                       <input style={S.inline} value={h.type || ""} onChange={(e) => updateHolding(i, "type", e.target.value)} />
                     </Td>
@@ -572,7 +626,7 @@ export default function App() {
               onClick={() =>
                 setHoldings([
                   ...holdings,
-                  { _id: newId(), type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "", mainFund: "NO" },
+                  { type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "", mainFund: "NO" },
                 ])
               }
             >
@@ -619,8 +673,8 @@ function Th({ children, align = "left" }: { children: React.ReactNode; align?: A
   return <th style={{ ...S.th, textAlign: align }}>{children}</th>;
 }
 
-function Td({ children, align = "left" }: { children: React.ReactNode; align?: Align }) {
-  return <td style={{ ...S.td, textAlign: align }}>{children}</td>;
+function Td({ children, align = "left", style: extraStyle }: { children: React.ReactNode; align?: Align; style?: React.CSSProperties }) {
+  return <td style={{ ...S.td, textAlign: align, ...extraStyle }}>{children}</td>;
 }
 
 function Fonts() {
@@ -917,6 +971,31 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: "pointer",
   },
+  amountInput: {
+    width: 150,
+    background: "#f8fafc",
+    color: "#020817",
+    border: "1px solid #1e293b",
+    borderRadius: 6,
+    padding: "6px 8px",
+    outline: "none",
+    fontFamily: "'DM Mono', monospace",
+  },
+  checkboxWrap: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    cursor: "pointer",
+  },
+  checkbox: {
+    width: 14,
+    height: 14,
+    accentColor: "#00d4aa",
+    cursor: "pointer",
+  },
+  checkboxText: {
+    color: "#e2e8f0",
+  },
   smallBtn: {
     background: "rgba(0,212,170,.1)",
     color: "#00d4aa",
@@ -926,22 +1005,5 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     cursor: "pointer",
     fontSize: 12,
-  },
-  checkboxWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    cursor: "pointer",
-    justifyContent: "center",
-  },
-  checkbox: {
-    accentColor: "#00d4aa",
-    width: 16,
-    height: 16,
-    cursor: "pointer",
-  },
-  checkboxText: {
-    fontSize: 12,
-    color: "#64748b",
   },
 };
