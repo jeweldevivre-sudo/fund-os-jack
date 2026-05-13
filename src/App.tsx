@@ -47,6 +47,13 @@ type TargetWeight = {
 type BuyOrder = {
   fundName?: string;
   suggestedBuy?: string | number;
+  category?: string;
+  // alternate key formats from Google Apps Script
+  "Fund Name"?: string;
+  "Suggested Buy"?: string | number;
+  "Category"?: string;
+  fund_name?: string;
+  suggested_buy?: string | number;
 };
 
 type ApiData = {
@@ -142,12 +149,29 @@ export default function App() {
         }))
       );
 
+      // Normalize buy orders — Google Apps Script may return keys as camelCase,
+      // "Fund Name" / "Suggested Buy", or other variations
+      function normalizeBuyOrder(order: BuyOrder): { fundName: string; suggestedBuy: string | number; category: string } {
+        const name =
+          String(
+            order.fundName ||
+            order["Fund Name"] ||
+            order.fund_name ||
+            ""
+          ).trim();
+        const buy =
+          order.suggestedBuy ??
+          order["Suggested Buy"] ??
+          order.suggested_buy ??
+          "";
+        const cat =
+          String(order.category || order["Category"] || "").trim();
+        return { fundName: name, suggestedBuy: buy, category: cat };
+      }
+
       const cleanedBuyOrders = (json?.buyOrders || [])
-        .filter((order) => String(order.fundName || "").trim() !== "" && num(order.suggestedBuy) > 0)
-        .map((order) => ({
-          fundName: String(order.fundName || "").trim(),
-          suggestedBuy: order.suggestedBuy,
-        }));
+        .map(normalizeBuyOrder)
+        .filter((order) => order.fundName !== "" && num(order.suggestedBuy) > 0);
 
       setBuyOrders(cleanedBuyOrders);
 
@@ -383,14 +407,16 @@ export default function App() {
               <thead>
                 <tr>
                   <Th>Fund Name</Th>
-                  <Th align="right">Buy Amount</Th>
+                  <Th align="right">Suggested Buy (฿)</Th>
+                  <Th align="right">Actual Amount (฿)</Th>
                   <Th align="center">Done</Th>
                 </tr>
               </thead>
               <tbody>
                 {buyOrders.length === 0 && (
                   <tr>
-                    <Td>No buy order</Td>
+                    <Td>No buy orders</Td>
+                    <Td align="right">-</Td>
                     <Td align="right">-</Td>
                     <Td align="center">-</Td>
                   </tr>
@@ -398,6 +424,9 @@ export default function App() {
                 {buyOrders.map((b, i) => (
                   <tr key={`${b.fundName}-${i}`}>
                     <Td>{b.fundName}</Td>
+                    <Td align="right" style={{ color: "#00d4aa", fontFamily: "'DM Mono', monospace" }}>
+                      ฿{fmt(b.suggestedBuy)}
+                    </Td>
                     <Td align="right">
                       <input
                         style={{ ...S.amountInput, textAlign: "right" }}
@@ -428,8 +457,30 @@ export default function App() {
                     </Td>
                   </tr>
                 ))}
+                {buyOrders.length > 0 && (
+                  <tr style={{ background: "rgba(0,212,170,.05)" }}>
+                    <td style={{ ...S.td, fontWeight: 700, color: "#e2e8f0" }}>Total</td>
+                    <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: "#00d4aa", fontFamily: "'DM Mono', monospace" }}>
+                      ฿{fmt(buyOrders.reduce((sum, b) => sum + num(b.suggestedBuy), 0))}
+                    </td>
+                    <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: "#00d4aa", fontFamily: "'DM Mono', monospace" }}>
+                      ฿{fmt(buyOrders.reduce((sum, b) => sum + num(buyAmounts[String(b.fundName || "").trim()] ?? b.suggestedBuy), 0))}
+                    </td>
+                    <td style={S.td} />
+                  </tr>
+                )}
               </tbody>
             </table>
+            {buyOrders.length === 0 && data?.buyOrders && data.buyOrders.length > 0 && (
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ color: "#475569", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono', monospace" }}>
+                  Debug: raw buyOrders from API ({data.buyOrders.length} rows)
+                </summary>
+                <pre style={{ color: "#475569", fontSize: 10, marginTop: 6, overflowX: "auto" }}>
+                  {JSON.stringify(data.buyOrders, null, 2)}
+                </pre>
+              </details>
+            )}
           </section>
         </main>
       )}
@@ -586,8 +637,8 @@ function Th({ children, align = "left" }: { children: React.ReactNode; align?: A
   return <th style={{ ...S.th, textAlign: align }}>{children}</th>;
 }
 
-function Td({ children, align = "left" }: { children: React.ReactNode; align?: Align }) {
-  return <td style={{ ...S.td, textAlign: align }}>{children}</td>;
+function Td({ children, align = "left", style: extraStyle }: { children: React.ReactNode; align?: Align; style?: React.CSSProperties }) {
+  return <td style={{ ...S.td, textAlign: align, ...extraStyle }}>{children}</td>;
 }
 
 function Fonts() {
