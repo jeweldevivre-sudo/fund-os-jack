@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  "https://script.google.com/macros/s/AKfycbxPppAvaP1B0coPrFfVe5eQRcMLbxQKjelBDKwm3eE1ytaAsuYLTHKb3IZ-YILR8SjI/exec";
+  "https://script.google.com/macros/s/AKfycbw1ccMGs8Tknisa9mpIQqHkwzoRDFFd62N4I1kD7lDqEqhf9wjfhO2wrzG-nRUkaNGL/exec";
 
 const CATEGORIES = [
   "US Equity",
@@ -35,6 +35,7 @@ type Holding = {
   units?: string | number;
   navCost?: string | number;
   navPrice?: string | number;
+  mainFund?: string | number;
   marketValue?: string | number;
   currentPercent?: string | number;
 };
@@ -230,6 +231,7 @@ export default function App() {
           units: clean(h.units),
           navCost: clean(h.navCost),
           navPrice: clean(h.navPrice),
+          mainFund: h.mainFund || "NO",
         })),
       });
 
@@ -284,28 +286,10 @@ export default function App() {
   const dcaBudget = summary.dcaBudget || 0;
   const remaining = summary.remaining || 0;
 
-  const categoryWeights = useMemo(() => {
-    const rows = data?.holdings || [];
-    const totalMarketValue = rows.reduce((sum, h) => sum + num(h.marketValue), 0);
-    const map: Record<string, { category: string; marketValue: number; currentPercent: number }> = {};
-
-    rows.forEach((h) => {
-      const category = String(h.category || "Uncategorized").trim() || "Uncategorized";
-      if (!map[category]) {
-        map[category] = { category, marketValue: 0, currentPercent: 0 };
-      }
-      map[category].marketValue += num(h.marketValue);
-    });
-
-    return Object.values(map).map((item) => ({
-      ...item,
-      currentPercent: totalMarketValue > 0 ? item.marketValue / totalMarketValue : 0,
-    }));
-  }, [data]);
-
   const donut = useMemo(() => {
+    const rows = data?.holdings || [];
     let start = 0;
-    const parts = categoryWeights.map((r, i) => {
+    const parts = rows.map((r, i) => {
       const pct = num(r.currentPercent) <= 1 ? num(r.currentPercent) * 100 : num(r.currentPercent);
       const end = start + pct;
       const p = `${PALETTE[i % PALETTE.length]} ${start}% ${end}%`;
@@ -313,7 +297,7 @@ export default function App() {
       return p;
     });
     return parts.length ? `conic-gradient(${parts.join(",")})` : "#1e293b";
-  }, [categoryWeights]);
+  }, [data]);
 
   if (loading) {
     return (
@@ -388,8 +372,8 @@ export default function App() {
                 </div>
               </div>
 
-              {categoryWeights.map((h, i) => (
-                <div key={`${h.category}-${i}`} style={S.weightRow}>
+              {(data?.holdings || []).map((h, i) => (
+                <div key={`${h.fundName}-${i}`} style={S.weightRow}>
                   <span>{h.category}</span>
                   <b style={{ color: PALETTE[i % PALETTE.length] }}>{fmtPct(h.currentPercent)}</b>
                 </div>
@@ -570,6 +554,7 @@ export default function App() {
                   <Th align="right">Units</Th>
                   <Th align="right">NAV Cost</Th>
                   <Th align="right">NAV Price</Th>
+                  <Th>Main Fund</Th>
                 </tr>
               </thead>
               <tbody>
@@ -598,6 +583,16 @@ export default function App() {
                     <Td align="right">
                       <input style={{ ...S.inline, textAlign: "right" }} value={h.navPrice ?? ""} onChange={(e) => updateHolding(i, "navPrice", e.target.value)} />
                     </Td>
+                    <Td>
+                      <select
+                        style={S.select}
+                        value={String(h.mainFund || "NO")}
+                        onChange={(e) => updateHolding(i, "mainFund", e.target.value)}
+                      >
+                        <option value="YES">YES</option>
+                        <option value="NO">NO</option>
+                      </select>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
@@ -608,7 +603,7 @@ export default function App() {
               onClick={() =>
                 setHoldings([
                   ...holdings,
-                  { type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "" },
+                  { type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "", mainFund: "NO" },
                 ])
               }
             >
