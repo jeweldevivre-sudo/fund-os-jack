@@ -112,6 +112,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loggingFund, setLoggingFund] = useState("");
+  const [buyOrders, setBuyOrders] = useState<BuyOrder[]>([]);
   const [buyAmounts, setBuyAmounts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -141,10 +142,19 @@ export default function App() {
         }))
       );
 
+      const cleanedBuyOrders = (json?.buyOrders || [])
+        .filter((order) => String(order.fundName || "").trim() !== "" && num(order.suggestedBuy) > 0)
+        .map((order) => ({
+          fundName: String(order.fundName || "").trim(),
+          suggestedBuy: order.suggestedBuy,
+        }));
+
+      setBuyOrders(cleanedBuyOrders);
+
       const nextBuyAmounts: Record<string, string> = {};
-      (json?.buyOrders || []).forEach((order) => {
+      cleanedBuyOrders.forEach((order) => {
         const fundName = String(order.fundName || "").trim();
-        if (fundName) nextBuyAmounts[fundName] = String(order.suggestedBuy ?? "");
+        nextBuyAmounts[fundName] = String(order.suggestedBuy ?? "");
       });
       setBuyAmounts(nextBuyAmounts);
     } catch (e) {
@@ -378,14 +388,14 @@ export default function App() {
                 </tr>
               </thead>
               <tbody>
-                {(data?.buyOrders || []).length === 0 && (
+                {buyOrders.length === 0 && (
                   <tr>
                     <Td>No buy order</Td>
                     <Td align="right">-</Td>
                     <Td align="center">-</Td>
                   </tr>
                 )}
-                {(data?.buyOrders || []).map((b, i) => (
+                {buyOrders.map((b, i) => (
                   <tr key={`${b.fundName}-${i}`}>
                     <Td>{b.fundName}</Td>
                     <Td align="right">
@@ -873,6 +883,31 @@ const S: Record<string, React.CSSProperties> = {
     padding: "9px 14px",
     fontWeight: 700,
     cursor: "pointer",
+  },
+  amountInput: {
+    width: 150,
+    background: "#f8fafc",
+    color: "#020817",
+    border: "1px solid #1e293b",
+    borderRadius: 6,
+    padding: "6px 8px",
+    outline: "none",
+    fontFamily: "'DM Mono', monospace",
+  },
+  checkboxWrap: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    cursor: "pointer",
+  },
+  checkbox: {
+    width: 14,
+    height: 14,
+    accentColor: "#00d4aa",
+    cursor: "pointer",
+  },
+  checkboxText: {
+    color: "#e2e8f0",
   },
   smallBtn: {
     background: "rgba(0,212,170,.1)",
