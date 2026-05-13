@@ -142,7 +142,12 @@ export default function App() {
       setData(json);
       setPortfolioName(json?.meta?.portfolioName || "");
       setSummary(json?.summary || {});
-      setHoldings(json?.holdings || []);
+      setHoldings(
+        (json?.holdings || []).map((h) => ({
+          ...h,
+          mainFund: String(h.mainFund || "NO").trim().toUpperCase() === "YES" ? "YES" : "NO",
+        }))
+      );
       setTargetWeight(
         (json?.targetWeight || []).map((r) => ({
           category: r.category || "",
@@ -286,10 +291,28 @@ export default function App() {
   const dcaBudget = summary.dcaBudget || 0;
   const remaining = summary.remaining || 0;
 
+  const categoryWeights = useMemo(() => {
+    const rows = holdings.length > 0 ? holdings : data?.holdings || [];
+    const totalMarketValue = rows.reduce((sum, h) => sum + num(h.marketValue), 0);
+    const map: Record<string, { category: string; marketValue: number; currentPercent: number }> = {};
+
+    rows.forEach((h) => {
+      const category = String(h.category || "Uncategorized").trim() || "Uncategorized";
+      if (!map[category]) {
+        map[category] = { category, marketValue: 0, currentPercent: 0 };
+      }
+      map[category].marketValue += num(h.marketValue);
+    });
+
+    return Object.values(map).map((item) => ({
+      ...item,
+      currentPercent: totalMarketValue > 0 ? item.marketValue / totalMarketValue : 0,
+    }));
+  }, [data, holdings]);
+
   const donut = useMemo(() => {
-    const rows = data?.holdings || [];
     let start = 0;
-    const parts = rows.map((r, i) => {
+    const parts = categoryWeights.map((r, i) => {
       const pct = num(r.currentPercent) <= 1 ? num(r.currentPercent) * 100 : num(r.currentPercent);
       const end = start + pct;
       const p = `${PALETTE[i % PALETTE.length]} ${start}% ${end}%`;
@@ -297,7 +320,7 @@ export default function App() {
       return p;
     });
     return parts.length ? `conic-gradient(${parts.join(",")})` : "#1e293b";
-  }, [data]);
+  }, [categoryWeights]);
 
   if (loading) {
     return (
@@ -372,8 +395,8 @@ export default function App() {
                 </div>
               </div>
 
-              {(data?.holdings || []).map((h, i) => (
-                <div key={`${h.fundName}-${i}`} style={S.weightRow}>
+              {categoryWeights.map((h, i) => (
+                <div key={`${h.category}-${i}`} style={S.weightRow}>
                   <span>{h.category}</span>
                   <b style={{ color: PALETTE[i % PALETTE.length] }}>{fmtPct(h.currentPercent)}</b>
                 </div>
