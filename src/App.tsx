@@ -447,7 +447,7 @@ export default function App() {
               </thead>
               <tbody>
                 {targetWeight.map((r, i) => (
-                  <tr key={`${r.category}-${i}`}>
+                  <tr key={i}>
                     <Td>
                       <select
                         style={S.select}
@@ -495,7 +495,7 @@ export default function App() {
               </thead>
               <tbody>
                 {holdings.map((h, i) => (
-                  <tr key={`${h.fundName}-${i}`}>
+                  <tr key={i}}>
                     <Td>
                       <input style={S.inline} value={h.type || ""} onChange={(e) => updateHolding(i, "type", e.target.value)} />
                     </Td>
