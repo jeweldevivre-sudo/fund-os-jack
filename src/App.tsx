@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  "https://script.google.com/macros/s/AKfycbzykS2Z7JIwRL8aqQDEfC-IJJ2UbFFbTf_q7Isgg2ARICwod1yKsfzBuVh9lCMbgrRL/exec";
+  "https://script.google.com/macros/s/AKfycbxPppAvaP1B0coPrFfVe5eQRcMLbxQKjelBDKwm3eE1ytaAsuYLTHKb3IZ-YILR8SjI/exec";
 
 const CATEGORIES = [
   "US Equity",
@@ -26,6 +26,9 @@ type SummaryData = {
   currentAge?: string | number;
   retirementAge?: string | number;
   investmentTerm?: string | number;
+  totalCost?: string | number;
+  profitLoss?: string | number;
+  profitLossPercent?: string | number;
 };
 
 type Holding = {
@@ -35,7 +38,6 @@ type Holding = {
   units?: string | number;
   navCost?: string | number;
   navPrice?: string | number;
-  mainFund?: string | number;
   marketValue?: string | number;
   currentPercent?: string | number;
 };
@@ -95,6 +97,19 @@ function fmtPct(v: unknown) {
   return `${(Math.abs(n) <= 1 ? n * 100 : n).toFixed(2)}%`;
 }
 
+function fmtSignedMoney(v: unknown) {
+  const n = num(v);
+  const sign = n > 0 ? "+" : n < 0 ? "-" : "";
+  return `${sign}฿${fmt(Math.abs(n))}`;
+}
+
+function fmtSignedPct(v: unknown) {
+  const n = num(v);
+  const normalized = Math.abs(n) <= 1 ? n * 100 : n;
+  const sign = normalized > 0 ? "+" : normalized < 0 ? "-" : "";
+  return `${sign}${Math.abs(normalized).toFixed(2)}%`;
+}
+
 function clean(v: unknown) {
   return String(v ?? "").replace(/,/g, "").replace("%", "").trim();
 }
@@ -142,10 +157,7 @@ export default function App() {
       setData(json);
       setPortfolioName(json?.meta?.portfolioName || "");
       setSummary(json?.summary || {});
-      setHoldings((json?.holdings || []).map((h) => ({
-        ...h,
-        mainFund: String(h.mainFund || "NO").trim().toUpperCase() === "YES" ? "YES" : "NO",
-      })));
+      setHoldings(json?.holdings || []);
       setTargetWeight(
         (json?.targetWeight || []).map((r) => ({
           category: r.category || "",
@@ -234,7 +246,6 @@ export default function App() {
           units: clean(h.units),
           navCost: clean(h.navCost),
           navPrice: clean(h.navPrice),
-          mainFund: h.mainFund || "NO",
         })),
       });
 
@@ -288,9 +299,12 @@ export default function App() {
   const totalPortfolio = summary.totalPortfolioValue || 0;
   const dcaBudget = summary.dcaBudget || 0;
   const remaining = summary.remaining || 0;
+  const profitLoss = summary.profitLoss || 0;
+  const profitLossPercent = summary.profitLossPercent || 0;
+  const profitLossColor = num(profitLoss) >= 0 ? "#00d4aa" : "#fb7185";
 
   const categoryWeights = useMemo(() => {
-    const rows = holdings.length > 0 ? holdings : data?.holdings || [];
+    const rows = data?.holdings || [];
     const totalMarketValue = rows.reduce((sum, h) => sum + num(h.marketValue), 0);
     const map: Record<string, { category: string; marketValue: number; currentPercent: number }> = {};
 
@@ -306,7 +320,7 @@ export default function App() {
       ...item,
       currentPercent: totalMarketValue > 0 ? item.marketValue / totalMarketValue : 0,
     }));
-  }, [holdings, data]);
+  }, [data]);
 
   const donut = useMemo(() => {
     let start = 0;
@@ -381,6 +395,14 @@ export default function App() {
             <Stat label="Total Portfolio" value={`฿${fmt(totalPortfolio)}`} />
             <Stat label="DCA Budget" value={`฿${fmt(dcaBudget)}`} />
             <Stat label="Remaining" value={`฿${fmt(remaining)}`} />
+            <Stat
+              label="Profit/Loss"
+              value={
+                <span style={{ color: profitLossColor }}>
+                  {fmtSignedMoney(profitLoss)} <span style={{ fontSize: 14 }}>({fmtSignedPct(profitLossPercent)})</span>
+                </span>
+              }
+            />
             <Stat label="Investment Term" value={`${summary.investmentTerm || 0} years`} />
           </section>
 
@@ -406,6 +428,15 @@ export default function App() {
               <Summary label="Status" value={summary.status} />
               <Summary label="DCA Budget" value={`฿${fmt(summary.dcaBudget)}`} />
               <Summary label="Total Portfolio Value" value={`฿${fmt(summary.totalPortfolioValue)}`} />
+              <Summary label="Total Cost" value={`฿${fmt(summary.totalCost)}`} />
+              <Summary
+                label="Profit/Loss"
+                value={
+                  <span style={{ color: profitLossColor }}>
+                    {fmtSignedMoney(summary.profitLoss)} ({fmtSignedPct(summary.profitLossPercent)})
+                  </span>
+                }
+              />
               <Summary label="Total Value After DCA" value={`฿${fmt(summary.totalValueAfterDCA)}`} />
               <Summary label="Target Goal" value={`฿${fmt(summary.targetGoal)}`} />
               <Summary label="Remaining" value={`฿${fmt(summary.remaining)}`} />
@@ -575,7 +606,6 @@ export default function App() {
                   <Th align="right">Units</Th>
                   <Th align="right">NAV Cost</Th>
                   <Th align="right">NAV Price</Th>
-                  <Th>Main Fund</Th>
                 </tr>
               </thead>
               <tbody>
@@ -604,16 +634,6 @@ export default function App() {
                     <Td align="right">
                       <input style={{ ...S.inline, textAlign: "right" }} value={h.navPrice ?? ""} onChange={(e) => updateHolding(i, "navPrice", e.target.value)} />
                     </Td>
-                    <Td>
-                      <select
-                        style={S.select}
-                        value={String(h.mainFund || "NO").trim().toUpperCase() === "YES" ? "YES" : "NO"}
-                        onChange={(e) => updateHolding(i, "mainFund", e.target.value)}
-                      >
-                        <option value="YES">YES</option>
-                        <option value="NO">NO</option>
-                      </select>
-                    </Td>
                   </tr>
                 ))}
               </tbody>
@@ -624,7 +644,7 @@ export default function App() {
               onClick={() =>
                 setHoldings([
                   ...holdings,
-                  { type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "", mainFund: "NO" },
+                  { type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "" },
                 ])
               }
             >
