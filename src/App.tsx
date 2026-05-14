@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ||
-  "https://script.google.com/macros/s/AKfycbxPppAvaP1B0coPrFfVe5eQRcMLbxQKjelBDKwm3eE1ytaAsuYLTHKb3IZ-YILR8SjI/exec";
+  "https://script.google.com/macros/s/AKfycbzPy5qxSolcmDWsNrTB149WHI9M1aQRQQGtLnHyFwgUQ1BjLwMQbdEkM4-VfZ7xI6nz/exec";
 
 const CATEGORIES = [
   "US Equity",
