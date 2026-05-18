@@ -261,6 +261,10 @@ export default function App() {
 
       await loadData();
       setNotice("Saved");
+
+setTimeout(() => {
+  setNotice("");
+}, 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
