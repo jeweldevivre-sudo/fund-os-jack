@@ -40,6 +40,7 @@ type Holding = {
   navPrice?: string | number;
   marketValue?: string | number;
   currentPercent?: string | number;
+  mainFund?: string;
 };
 
 type TargetWeight = {
@@ -246,6 +247,7 @@ export default function App() {
           units: clean(h.units),
           navCost: clean(h.navCost),
           navPrice: clean(h.navPrice),
+          mainFund: h.mainFund || "NO",
         })),
       });
 
@@ -606,6 +608,7 @@ export default function App() {
                   <Th align="right">Units</Th>
                   <Th align="right">NAV Cost</Th>
                   <Th align="right">NAV Price</Th>
+                  <Th align="center">Main Fund</Th>
                 </tr>
               </thead>
               <tbody>
@@ -634,6 +637,16 @@ export default function App() {
                     <Td align="right">
                       <input style={{ ...S.inline, textAlign: "right" }} value={h.navPrice ?? ""} onChange={(e) => updateHolding(i, "navPrice", e.target.value)} />
                     </Td>
+                    <Td align="center">
+                      <select
+                        style={S.select}
+                        value={h.mainFund || "NO"}
+                        onChange={(e) => updateHolding(i, "mainFund", e.target.value)}
+                      >
+                        <option value="YES">YES</option>
+                        <option value="NO">NO</option>
+                      </select>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
@@ -644,7 +657,7 @@ export default function App() {
               onClick={() =>
                 setHoldings([
                   ...holdings,
-                  { type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "" },
+                  { type: "Tax saving", category: "", fundName: "", units: "", navCost: "", navPrice: "", mainFund: "NO" },
                 ])
               }
             >
